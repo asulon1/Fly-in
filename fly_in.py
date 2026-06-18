@@ -3,10 +3,10 @@
 #                                                      :::      ::::::::    #
 #  fly_in.py                                         :+:      :+:    :+:    #
 #                                                  +:+ +:+         +:+      #
-#  By: asulon <asulon@student.42.fr>             +#+  +:+       +#+         #
+#  By: asulon <asulon@student.42nice.fr>         +#+  +:+       +#+         #
 #                                              +#+#+#+#+#+   +#+            #
 #  Created: 2026/05/21 16:39:37 by asulon          #+#    #+#               #
-#  Updated: 2026/06/17 15:00:16 by asulon          ###   ########.fr        #
+#  Updated: 2026/06/18 14:46:19 by asulon          ###   ########.fr        #
 #                                                                           #
 # ************************************************************************* #
 
@@ -19,6 +19,28 @@ import pygame
 class ConfigError(Exception):
     def __init__(self, message: str) -> None:
         print(f"Configuration File Error : {message}")
+
+
+def join_connection(config: Dict):
+    connections = config.get("connections")
+    if connections is None:
+        return config
+
+    name_to_key = {v['name']: k for k, v in config['map'].items()}
+
+    for point in config['map'].values():
+        point['connections'] = []
+
+    for connection in connections:
+        point_a, point_b = connection.split('-')
+
+        key_a = name_to_key[point_a]
+        key_b = name_to_key[point_b]
+
+        config['map'][key_a]['connections'].append(point_b)
+        config['map'][key_b]['connections'].append(point_a)
+
+    return config
 
 
 def parse_config(filename: str) -> Dict[str, str]:
@@ -134,52 +156,58 @@ def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return new_config
 
 
+def start_simulation():
+    # pygame setup
+    pygame.init()
+    screen = pygame.display.set_mode((1280, 720))
+    clock = pygame.time.Clock()
+    running = True
+    dt = 0
+
+    player_pos = pygame.Vector2(
+        screen.get_width() / 2, screen.get_height() / 2)
+
+    while running:
+        # poll for events
+        # pygame.QUIT event means the user clicked X to close your window
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        # fill the screen with a color to wipe away anything from last frame
+        screen.fill("purple")
+
+        pygame.draw.circle(screen, "red", player_pos, 40)
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_w]:
+            player_pos.y -= 300 * dt
+        if keys[pygame.K_s]:
+            player_pos.y += 300 * dt
+        if keys[pygame.K_a]:
+            player_pos.x -= 300 * dt
+        if keys[pygame.K_d]:
+            player_pos.x += 300 * dt
+
+        # flip() the display to put your work on screen
+        pygame.display.flip()
+
+        # limits FPS to 60
+        # dt is delta time in seconds since last frame, used for framerate-
+        # independent physics.
+        dt = clock.tick(60) / 1000
+
+    pygame.quit()
+
+
 def main():
     try:
-        # raw_config = parse_config("./maps/easy/01_linear_path.txt")
-        # config = validate_config(raw_config)
-        # print(config)
-        # pygame setup
-        pygame.init()
-        screen = pygame.display.set_mode((1280, 720))
-        clock = pygame.time.Clock()
-        running = True
-        dt = 0
+        raw_config = parse_config("./maps/easy/03_basic_capacity.txt")
+        config = validate_config(raw_config)
+        config = join_connection(config)
 
-        player_pos = pygame.Vector2(
-            screen.get_width() / 2, screen.get_height() / 2)
+        print(config)
 
-        while running:
-            # poll for events
-            # pygame.QUIT event means the user clicked X to close your window
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-
-            # fill the screen with a color to wipe away anything from last frame
-            screen.fill("purple")
-
-            pygame.draw.circle(screen, "red", player_pos, 40)
-
-            keys = pygame.key.get_pressed()
-            if keys[pygame.K_w]:
-                player_pos.y -= 300 * dt
-            if keys[pygame.K_s]:
-                player_pos.y += 300 * dt
-            if keys[pygame.K_a]:
-                player_pos.x -= 300 * dt
-            if keys[pygame.K_d]:
-                player_pos.x += 300 * dt
-
-            # flip() the display to put your work on screen
-            pygame.display.flip()
-
-            # limits FPS to 60
-            # dt is delta time in seconds since last frame, used for framerate-
-            # independent physics.
-            dt = clock.tick(60) / 1000
-
-        pygame.quit()
     except (ValueError, ConfigError):
         sys.exit(1)
 
