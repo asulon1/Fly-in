@@ -6,7 +6,7 @@
 #  By: asulon <asulon@student.42nice.fr>         +#+  +:+       +#+         #
 #                                              +#+#+#+#+#+   +#+            #
 #  Created: 2026/05/21 16:39:37 by asulon          #+#    #+#               #
-#  Updated: 2026/06/18 14:46:19 by asulon          ###   ########.fr        #
+#  Updated: 2026/07/21 15:04:23 by asulon          ###   ########.fr        #
 #                                                                           #
 # ************************************************************************* #
 
@@ -25,7 +25,7 @@ def join_connection(config: Dict):
     connections = config.get("connections")
     if connections is None:
         return config
-
+    print(config)
     name_to_key = {v['name']: k for k, v in config['map'].items()}
 
     for point in config['map'].values():
@@ -74,25 +74,33 @@ def parse_config(filename: str) -> Dict[str, str]:
     return config
 
 
+def parse_coordinate(value: Any, key_name: str) -> tuple[int, int]:
+    """Validate and parse a coordinate in strict 'x,y' format with positive values."""
+    if not isinstance(value, str):
+        raise ConfigError(f"{key_name} must be in 'x,y' format")
+    if not re.fullmatch(r"-?\d+,-?\d+", value):
+        raise ConfigError(f"{key_name} must be in 'x,y' format")
+
+    x_raw, y_raw = value.split(',')
+    x, y = int(x_raw), int(y_raw)
+
+    return x, y
+
+
 def parse_hub(hub: str):
     splited_hub = hub.split(" ")
-
-    def parse_coordinate(value: Any, key_name: str) -> tuple[int, int]:
-        """Validate and parse a coordinate in strict 'x,y' format."""
-        if not isinstance(value, str) or not re.fullmatch(r"\d+,\d+", value):
-            raise ConfigError(f"{key_name} must be in 'x,y' format")
-        x_raw, y_raw = value.split(',')
-        return int(x_raw), int(y_raw)
-    try:
-        name = splited_hub[0]
-        coordinate = parse_coordinate(
-            f"{splited_hub[1]},{splited_hub[2]}", name)
-    except (ValueError) as error:
-        print(error)
-
+    name = splited_hub[0]
+    coordinate = parse_coordinate(
+        f"{splited_hub[1]},{splited_hub[2]}", name)
+    metadata = []
+    i = 3
+    for i in range(len(splited_hub)):
+        metadata.append(splited_hub[i])
+    # TODO c'est bon faut revoir tout ça car la c'est la catastrophe
     res = {"name": splited_hub[0],
            "coordinate": coordinate,
-           "metadata": splited_hub[3]}
+           "metadata": metadata
+           }
     return res
 
 
@@ -102,13 +110,6 @@ def validate_map(map):
 
 def validate_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Check config file keys and values"""
-
-    def parse_coordinate(value: Any, key_name: str) -> tuple[int, int]:
-        """Validate and parse a coordinate in strict 'x,y' format."""
-        if not isinstance(value, str) or not re.fullmatch(r"\d+,\d+", value):
-            raise ConfigError(f"{key_name} must be in 'x,y' format")
-        x_raw, y_raw = value.split(',')
-        return int(x_raw), int(y_raw)
 
     """Checking required keys"""
     required_key = ['nb_drones', 'start_hub',
@@ -202,7 +203,7 @@ def start_simulation():
 
 def main():
     try:
-        raw_config = parse_config("./maps/easy/03_basic_capacity.txt")
+        raw_config = parse_config("./maps/easy/02_simple_fork.txt")
         config = validate_config(raw_config)
         config = join_connection(config)
 
