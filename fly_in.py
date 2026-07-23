@@ -25,18 +25,19 @@ def join_connection(config: Dict):
     connections = config.get("connections")
     if connections is None:
         return config
-    print(config)
     name_to_key = {v['name']: k for k, v in config['map'].items()}
 
     for point in config['map'].values():
         point['connections'] = []
 
     for connection in connections:
-        point_a, point_b = connection.split('-')
-
+        splited_connection = connection.split(' ')
+        point_a, point_b = splited_connection[0].split('-')
+        print(point_a)
+        print(point_b)
         key_a = name_to_key[point_a]
         key_b = name_to_key[point_b]
-
+        # TODO: add metadata index for connections array
         config['map'][key_a]['connections'].append(point_b)
         config['map'][key_b]['connections'].append(point_a)
 
@@ -92,11 +93,13 @@ def parse_hub(hub: str):
     name = splited_hub[0]
     coordinate = parse_coordinate(
         f"{splited_hub[1]},{splited_hub[2]}", name)
+    metadata = hub.split("[")
+    splited_metadata = metadata[1].split(' ')
     metadata = []
-    i = 3
-    for i in range(len(splited_hub)):
-        metadata.append(splited_hub[i])
-    # TODO c'est bon faut revoir tout ça car la c'est la catastrophe
+    for data in splited_metadata:
+        data = data.rstrip(']')
+        metadata.append(data)
+
     res = {"name": splited_hub[0],
            "coordinate": coordinate,
            "metadata": metadata
@@ -203,7 +206,7 @@ def start_simulation():
 
 def main():
     try:
-        raw_config = parse_config("./maps/easy/02_simple_fork.txt")
+        raw_config = parse_config("./maps/easy/02_capacity_hell.txt")
         config = validate_config(raw_config)
         config = join_connection(config)
 
