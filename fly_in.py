@@ -6,7 +6,7 @@
 #  By: asulon <asulon@student.42nice.fr>         +#+  +:+       +#+         #
 #                                              +#+#+#+#+#+   +#+            #
 #  Created: 2026/05/21 16:39:37 by asulon          #+#    #+#               #
-#  Updated: 2026/07/29 15:48:41 by asulon          ###   ########.fr        #
+#  Updated: 2026/07/29 16:03:21 by asulon          ###   ########.fr        #
 #                                                                           #
 # ************************************************************************* #
 
@@ -39,7 +39,7 @@ class DroneAnim:
 
 
 class ConfigError(Exception):
-    def __init__(self, message: str, line_no: int = None):
+    def __init__(self, message: str, line_no: int | None = None):
         if line_no is not None:
             message = f"line {line_no}: {message}"
         super().__init__(message)
@@ -126,7 +126,8 @@ def parse_metadata_block(raw: str, line_no: int) -> List[str]:
         return []
     if not (raw.startswith("[") and raw.endswith("]")):
         raise ConfigError(
-            f"invalid metadata block '{raw}', expected '[key=value ...]'", line_no)
+            f"invalid metadata block '{raw}'"
+            ", expected '[key=value ...]'", line_no)
 
     content = raw[1:-1].strip()
     if content == "":
@@ -150,7 +151,8 @@ def validate_positive_int(raw_value: str, field_name: str,
                           line_no: int) -> int:
     if not re.fullmatch(r"\d+", raw_value) or int(raw_value) <= 0:
         raise ConfigError(
-            f"'{field_name}' must be a positive integer, got '{raw_value}'", line_no)
+            f"'{field_name}' must be a positive integer, "
+            f"got '{raw_value}'", line_no)
     return int(raw_value)
 
 
@@ -158,7 +160,8 @@ def parse_coordinate(value: str, key_name: str, line_no: int
                      ) -> Tuple[int, int]:
     if not COORD_RE.fullmatch(value):
         raise ConfigError(
-            f"coordinates for '{key_name}' must be in 'x,y' integer format", line_no)
+            f"coordinates for '{key_name}'"
+            "must be in 'x,y' integer format", line_no)
     x_raw, y_raw = value.split(",")
     return int(x_raw), int(y_raw)
 
@@ -170,7 +173,8 @@ def parse_hub(raw: str, line_no: int) -> Dict[str, Any]:
         raise ConfigError("hub definition is missing a name", line_no)
     if not ZONE_NAME_RE.fullmatch(name):
         raise ConfigError(
-            f"invalid zone name '{name}' (dashes and spaces are forbidden)", line_no)
+            f"invalid zone name '{name}' "
+            "(dashes and spaces are forbidden)", line_no)
 
     remainder = parts[1] if len(parts) > 1 else ""
     coord_part, _, metadata_part = remainder.partition("[")
@@ -243,7 +247,8 @@ def validate_map(config: Dict[str, Any]) -> List[str]:
 
     if end["name"] not in visited:
         raise ConfigError(
-            f"end zone '{end['name']}' is not reachable from start zone '{start['name']}'"
+            f"end zone '{end['name']}' is not reachable from start zone "
+            f"'{start['name']}'"
         )
 
     # 3. Zones jamais atteignables depuis start (mortes, mais pas bloquant en soi)
@@ -289,7 +294,8 @@ def validate_config(entries: List[Tuple[int, str, str]]) -> Dict[str, Any]:
             name = hub["name"]
             if name in seen_names:
                 raise ConfigError(
-                    f"duplicate zone name '{name}' (already defined at line {seen_names[name]})",
+                    f"duplicate zone name '{name}'"
+                    f"(already defined at line {seen_names[name]})",
                     line_no)
             seen_names[name] = line_no
             hub["connections"] = []
@@ -319,7 +325,8 @@ def validate_config(entries: List[Tuple[int, str, str]]) -> Dict[str, Any]:
     return config
 
 
-def attach_connections(config: Dict[str, Any], connections_raw: List[Tuple[int, str]]) -> None:
+def attach_connections(config: Dict[str, Any],
+                       connections_raw: List[Tuple[int, str]]) -> None:
     name_to_key = {hub["name"]: key for key, hub in config["map"].items()}
     name_to_line = {hub["name"]: hub["_line_no"]
                     for hub in config["map"].values()}
@@ -330,7 +337,8 @@ def attach_connections(config: Dict[str, Any], connections_raw: List[Tuple[int, 
         endpoints = endpoints_part.strip()
         if "-" not in endpoints:
             raise ConfigError(
-                f"invalid connection format '{raw}', expected 'zone1-zone2'", line_no)
+                f"invalid connection format '{raw}', "
+                "expected 'zone1-zone2'", line_no)
 
         point_a, point_b = (p.strip() for p in endpoints.split("-", 1))
 
@@ -347,7 +355,8 @@ def attach_connections(config: Dict[str, Any], connections_raw: List[Tuple[int, 
         # "must link only previously defined zones" -> la zone doit apparaître avant la connexion
         if name_to_line[point_a] > line_no or name_to_line[point_b] > line_no:
             raise ConfigError(
-                f"connection '{point_a}-{point_b}' references a zone defined later in the file",
+                f"connection '{point_a}-{point_b}' "
+                "references a zone defined later in the file",
                 line_no)
 
         pair_key = frozenset((point_a, point_b))
@@ -513,7 +522,7 @@ def render_simulation(config, turns):
         pygame.display.flip()
 
         if turn_index >= len(turns) and not current_moves:
-            running = True  # simulation terminée, laisse la fenêtre encore un peu si tu veux
+            running = False  # simulation terminée, laisse la fenêtre encore un peu si tu veux
 
     pygame.quit()
 # ====== End pygame part ======
