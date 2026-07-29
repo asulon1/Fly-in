@@ -6,7 +6,7 @@
 #  By: asulon <asulon@student.42nice.fr>         +#+  +:+       +#+         #
 #                                              +#+#+#+#+#+   +#+            #
 #  Created: 2026/05/21 16:39:37 by asulon          #+#    #+#               #
-#  Updated: 2026/07/28 17:25:11 by asulon          ###   ########.fr        #
+#  Updated: 2026/07/29 15:48:41 by asulon          ###   ########.fr        #
 #                                                                           #
 # ************************************************************************* #
 
@@ -21,6 +21,21 @@ VALID_ZONE_TYPES = {"normal", "blocked", "restricted", "priority"}
 ZONE_NAME_RE = re.compile(r"^[^\s-]+$")
 COORD_RE = re.compile(r"-?\d+,-?\d+")
 METADATA_TOKEN_RE = re.compile(r"[A-Za-z_]+=[^\s\[\]]+")
+
+
+class DroneAnim:
+    def __init__(self, drone_id, start_pos, end_pos):
+        self.id = drone_id
+        self.start_pos = start_pos
+        self.end_pos = end_pos
+        self.progress = 0.0  # 0 -> 1 sur la durée du tour
+
+    def current_pos(self):
+        x = self.start_pos[0] + (self.end_pos[0] -
+                                 self.start_pos[0]) * self.progress
+        y = self.start_pos[1] + (self.end_pos[1] -
+                                 self.start_pos[1]) * self.progress
+        return x, y
 
 
 class ConfigError(Exception):
@@ -69,7 +84,7 @@ def join_connection(config: Dict):
 
 
 def parse_config(filename: str) -> List[Tuple[int, str, str]]:
-    """Parse le fichier, retourne une liste ordonnée de (line_no, key, value)."""
+    """Parse config and return List"""
     try:
         with open(filename) as file:
             lines = file.read().split("\n")
@@ -131,14 +146,16 @@ def metadata_to_dict(metadata: List[str]) -> Dict[str, str]:
     return dict(item.split("=", 1) for item in metadata)
 
 
-def validate_positive_int(raw_value: str, field_name: str, line_no: int) -> int:
+def validate_positive_int(raw_value: str, field_name: str,
+                          line_no: int) -> int:
     if not re.fullmatch(r"\d+", raw_value) or int(raw_value) <= 0:
         raise ConfigError(
             f"'{field_name}' must be a positive integer, got '{raw_value}'", line_no)
     return int(raw_value)
 
 
-def parse_coordinate(value: str, key_name: str, line_no: int) -> Tuple[int, int]:
+def parse_coordinate(value: str, key_name: str, line_no: int
+                     ) -> Tuple[int, int]:
     if not COORD_RE.fullmatch(value):
         raise ConfigError(
             f"coordinates for '{key_name}' must be in 'x,y' integer format", line_no)
@@ -188,7 +205,7 @@ def parse_hub(raw: str, line_no: int) -> Dict[str, Any]:
 
 
 def build_adjacency(config: Dict[str, Any]) -> Dict[str, List[str]]:
-    """Construit un dict {name_zone: [name_voisin, ...]} à partir de config['map']."""
+    """create dict {name_zone: [name_voisin, ...]} from config['map']."""
     adjacency: Dict[str, List[str]] = {}
     for hub in config["map"].values():
         adjacency[hub["name"]] = [conn["to"] for conn in hub["connections"]]
@@ -200,8 +217,8 @@ def find_hub_by_role(config: Dict[str, Any], role_key: str) -> Dict[str, Any]:
 
 
 def validate_map(config: Dict[str, Any]) -> List[str]:
-    """Valide la cohérence structurelle du graphe. Lève ConfigError sur erreur bloquante,
-    retourne une liste de warnings non bloquants."""
+    """Valid struct map. Raise ConfigError on major error,
+    return warning on minor error"""
     warnings: List[str] = []
     adjacency = build_adjacency(config)
 
@@ -362,58 +379,153 @@ def load_and_validate(filename: str) -> Dict[str, Any]:
         print(f"Warning: {warning}")
     return config
 
+# ====== PYGAME part ======
 
-def start_simulation():
-    # pygame setup
+
+def start_simulation(filename: str):
+    # --- 1. Parsing + validation (ce qu'on a fait avant) ---
+    try:
+        entries = parse_config(filename)
+        config = validate_config(entries)
+        # ou déjà fait dans validate_config selon ta version
+        config = join_connection(config)
+        warnings = validate_map(config)
+        for warning in warnings:
+            print(f"Warning: {warning}")
+    except ConfigError as error:
+        print(f"Error: {error}")
+        sys.exit(1)
+
+    # --- 2. Calcul de la simulation (l'algo, à part) ---
+    # liste de tours, ex: [["D1-roof1", "D2-corridorA"], ...]
+    turns = run_simulation(config)
+
+    # --- 3. Affichage pygame (rejoue les tours calculés) ---
+
+    print(config)
+    render_simulation(config, turns)
+
+
+def run_simulation(config):
+    """
+    Placeholder pour l'instant : ton algo de pathfinding viendra ici.
+    Doit retourner une liste de tours, chaque tour = liste de "D<id>-<zone>".
+    """
+    # TODO: remplacer par ton vrai algo
+    turns = [
+        ["D1-junction", "D2-junction"],
+        ["D1-path_a", "D2-path_b"],
+        ["D1-goal", "D2-goal"],
+    ]
+    return turns
+
+
+def to_pixel(coord, origin=(100, 100), scale=100):
+    x, y = coord
+    return origin[0] + x * scale, origin[1] + y * scale
+
+
+def build_name_to_hub(config):
+    return {hub["name"]: hub for hub in config["map"].values()}
+
+
+def draw_map(screen, config, font, name_to_hub):
+    colors = {"normal": (100, 100, 255), "blocked": (80, 80, 80),
+              "restricted": (255, 150, 0), "priority": (0, 200, 100)}
+
+    for hub in config["map"].values():
+        pos_a = to_pixel(hub["coordinate"])
+        for conn in hub["connections"]:
+            neighbor = name_to_hub[conn["to"]]
+            pos_b = to_pixel(neighbor["coordinate"])
+            pygame.draw.line(screen, (150, 150, 150), pos_a, pos_b, 2)
+
+    for hub in config["map"].values():
+        pos = to_pixel(hub["coordinate"])
+        pygame.draw.circle(screen, colors[hub["type"]], pos, 20)
+        label = font.render(hub["name"], True, (255, 255, 255))
+        screen.blit(label, (pos[0] - 20, pos[1] + 25))
+
+
+def draw_drones(screen, font, drone_positions):
+    for drone_id, pos in drone_positions.items():
+        pygame.draw.circle(screen, (255, 0, 0), (int(pos[0]), int(pos[1])), 10)
+        label = font.render(drone_id, True, (255, 255, 0))
+        screen.blit(label, (pos[0] - 10, pos[1] - 30))
+
+
+def render_simulation(config, turns):
     pygame.init()
-    screen = pygame.display.set_mode((1280, 720))
+    screen = pygame.display.set_mode((800, 600))
+    pygame.display.set_caption("Fly-in Drones")
+    font = pygame.font.SysFont(None, 20)
     clock = pygame.time.Clock()
+    name_to_hub = build_name_to_hub(config)
+
+    # position pixel actuelle de chaque drone, initialisée sur start_hub
+    start_hub = config["map"]["start_hub"]
+    start_pos = to_pixel(start_hub["coordinate"])
+    drone_positions = {
+        f"D{i+1}": start_pos for i in range(config["nb_drones"])}
+
+    turn_index = 0
+    # avancement de l'interpolation dans le tour courant (0 -> 1)
+    progress = 0.0
+    turn_duration = 800      # durée d'un tour en millisecondes
+    current_moves = {}       # {drone_id: (pos_depart, pos_arrivee)}
+
     running = True
-    dt = 0
-
-    player_pos = pygame.Vector2(
-        screen.get_width() / 2, screen.get_height() / 2)
-
     while running:
-        # poll for events
-        # pygame.QUIT event means the user clicked X to close your window
+        dt = clock.tick(60)
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
-        # fill the screen with a color to wipe away anything from last frame
-        screen.fill("purple")
+        # démarrer un nouveau tour si besoin
+        if not current_moves and turn_index < len(turns):
+            for move in turns[turn_index]:
+                drone_id, zone_name = move.split("-", 1)
+                start = drone_positions[drone_id]
+                end = to_pixel(name_to_hub[zone_name]["coordinate"])
+                current_moves[drone_id] = (start, end)
+            progress = 0.0
 
-        pygame.draw.circle(screen, "red", player_pos, 40)
+        # avancer l'interpolation du tour en cours
+        if current_moves:
+            progress += dt / turn_duration
+            if progress >= 1.0:
+                progress = 1.0
 
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_w]:
-            player_pos.y -= 300 * dt
-        if keys[pygame.K_s]:
-            player_pos.y += 300 * dt
-        if keys[pygame.K_a]:
-            player_pos.x -= 300 * dt
-        if keys[pygame.K_d]:
-            player_pos.x += 300 * dt
+            for drone_id, (start, end) in current_moves.items():
+                x = start[0] + (end[0] - start[0]) * progress
+                y = start[1] + (end[1] - start[1]) * progress
+                drone_positions[drone_id] = (x, y)
 
-        # flip() the display to put your work on screen
+            if progress >= 1.0:
+                current_moves = {}
+                turn_index += 1
+
+        # dessin
+        screen.fill((30, 30, 30))
+        draw_map(screen, config, font, name_to_hub)
+        draw_drones(screen, font, drone_positions)
         pygame.display.flip()
 
-        # limits FPS to 60
-        # dt is delta time in seconds since last frame, used for framerate-
-        # independent physics.
-        dt = clock.tick(60) / 1000
+        if turn_index >= len(turns) and not current_moves:
+            running = True  # simulation terminée, laisse la fenêtre encore un peu si tu veux
 
     pygame.quit()
+# ====== End pygame part ======
 
 
 def main():
     try:
-        raw_config = parse_config("./maps/easy/02_simple_fork.txt")
-        config = validate_config(raw_config)
-        config = join_connection(config)
-
-        print(config)
+        # raw_config = parse_config("./maps/easy/02_simple_fork.txt")
+        # config = validate_config(raw_config)
+        # config = join_connection(config)
+        # print(config)
+        start_simulation("./maps/hard/03_ultimate_challenge.txt")
 
     except (ValueError, ConfigError):
         sys.exit(1)
